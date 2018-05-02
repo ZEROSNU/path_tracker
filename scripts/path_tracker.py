@@ -3,9 +3,9 @@ import rospy
 import numpy as np
 import math
 from core_msgs.msg import Path3DArray
-from core_msgs.msg import control
+from core_msgs.msg import Control
 from core_msgs.msg import CenPoint
-from core_msgs.msg import ser_com
+from core_msgs.msg import VehicleState
 from geometry_msgs.msg import Vector3
 from std_msgs.msg import Int32
 
@@ -18,7 +18,7 @@ class tracker :
             self.speed_slope = 0.25 #m/s/conf
             self.delta_y_max = 0.2 #m maximum error
             self.speed_max = 1.5 #m/s
-            self.speed_avg = 0.01
+            self.speed_avg = 0.4
             # -------------^CONSTANT^--------------
 
             self.L = 1.54 #m distance between two wheel axis
@@ -30,9 +30,9 @@ class tracker :
             # ----------------------------------^HARDWARE_CONSTANT^------------------------------
 
             
-            self.control = control() #my order to the car
+            self.control = Control() #my order to the car
             self.goalpoint = CenPoint() #data of goal point - sPath origin placed in center, cenPath origin placed 770 from front wheel
-            self.cont_buff = np.empty(self.buff_size, dtype=(type([control(), float()]))) #past buff of the ordering
+            self.cont_buff = np.empty(self.buff_size, dtype=(type([Control(), float()]))) #past buff of the ordering
             
             self.cartime = 0.0 #time variables _ time when this node get sPath or cenPoint
             self.stime = 0.0
@@ -46,12 +46,12 @@ class tracker :
             self.sDelay = 0.0
             self.cDelay = 0.0
             self.obs = 0 
-            self.state_buff = np.empty(self.buff_size, dtype=type([ser_com(), float()]))
+            self.state_buff = np.empty(self.buff_size, dtype=type([VehicleState(), float()]))
             #-------^INPUT^---------------
             
       #function needs to update goalpoint - get speed and steering at time t
       def get_state(self, time) :
-            t_state = ser_com()
+            t_state = VehicleState()
             for i in reversed(self.state_buff) :
                   if i == None :
                         print "no data in state_buff"
@@ -76,7 +76,7 @@ class tracker :
             ugoalpoint.confidence = self.goalpoint.confidence
             time_ind = intime
             init = False
-            tmp = [ser_com(), float()]
+            tmp = [VehicleState(), float()]
             for ind in self.state_buff :
                   if ind == None :
                         continue
@@ -124,7 +124,8 @@ class tracker :
                   ugoalpoint.y_waypoint = - np.sin(delta_phi) * x_prime + np.cos(delta_phi) * y_prime
             else :
                   ugoalpoint.x_waypoint = ugoalpoint.x_waypoint - self.get_state(curtime).speed * (time_ind - ind[1])
-            self.goalpoint = ugoalpoint
+            self.goalpoint.x_waypoint = ugoalpoint.x_waypoint
+            self.goalpoint.y_waypoint = ugoalpoint.y_waypoint
       #how to update goalpoint integrate state_buff 0 to n-1
 
       def update_cartime(self, time) :
@@ -136,7 +137,7 @@ class tracker :
 
 
       def calc_get_cont(self) :
-            self.control = control()
+            self.control = Control()
             pttype = ''
             t=0.0
 
@@ -161,23 +162,19 @@ class tracker :
                   print "no input"
                   return self.control
             
-
-            if pttype == 'c' :
-                  self.update_goalpoint(self.ctime, self.cartime)
-            elif pttype == 's' :
-                  self.update_goalpoint(self.stime, self.cartime)
+            self.update_goalpoint(t, self.cartime)
 
             ld = math.sqrt(self.goalpoint.x_waypoint*self.goalpoint.x_waypoint + self.goalpoint.y_waypoint*self.goalpoint.y_waypoint)
             delta = -np.arctan(2 * self.L * self.goalpoint.y_waypoint / ld / (ld + 2 * self.lr * self.goalpoint.x_waypoint/ld)) # ld is lookahead distance
-            self.control.is_auto = 0
+            self.control.is_auto = True
             self.control.estop = 0
             self.control.gear = 0
             if pttype == 'c' :
-                  self.control.speed = self.goalpoint.confidence * self.speed_slope *0.04 #slow down factor
+                  self.control.speed = self.goalpoint.confidence * self.speed_slope *0.2 #slow down factor
             elif pttype == 's' :
                   self.control.speed = self.speed_avg
             self.control.steer = delta / np.pi * 180 #in degree
-            self.control.brake = 0
+            self.control.brake = 1
             self.cont_buff[0:-1]=self.cont_buff[1:self.buff_size]
             self.cont_buff[self.buff_size-1] = [self.control, self.cartime]
             if self.control.speed > self.speed_max :
@@ -268,11 +265,11 @@ def init() :
       
       rospy.init_node('path_tracker', anonymous=True)
       rospy.Subscriber('/sPath', Path3DArray, callback_s)
-      rospy.Subscriber('/cPoint', CenPoint, callback_c)
+      rospy.Subscriber('/waypoints', CenPoint, callback_c)
       rospy.Subscriber('/flag_obstacle', Int32, callback_obs)
-      rospy.Subscriber('/serial_topic', ser_com, callback_stbuff)
+      rospy.Subscriber('/serial_topic', VehicleState, callback_stbuff)
       
-      pub = rospy.Publisher('/control', control, queue_size=10)
+      pub = rospy.Publisher('/control', Control, queue_size=10)
       rate = rospy.Rate(main_track.pub_rate*main_track.time_acc_ratio)
       i=0
       while not rospy.is_shutdown() :

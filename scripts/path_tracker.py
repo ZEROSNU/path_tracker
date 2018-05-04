@@ -15,10 +15,10 @@ class tracker :
             self.pub_rate = 20.0 #Hz
             self.time_acc_ratio = 50 #loop in rate * acc_ratio
             self.buff_size = 10
-            self.speed_slope = 0.25 #m/s/conf
-            self.delta_y_max = 0.2 #m maximum error
-            self.speed_max = 1.5 #m/s
-            self.speed_avg = 0.4
+            self.speed_slope = 0.2 #m/s/conf
+            self.delta_y_max = 0.3 #m maximum error
+            self.speed_max = 10.0 #m/s
+            self.speed_avg = 1.0
             # -------------^CONSTANT^--------------
 
             self.L = 1.54 #m distance between two wheel axis
@@ -132,7 +132,7 @@ class tracker :
             self.cartime += time
 
       def decide_sPath_n(self) :
-            return 20
+            return 10
       #need to decide n for s_path
 
 
@@ -170,10 +170,10 @@ class tracker :
             self.control.estop = 0
             self.control.gear = 0
             if pttype == 'c' :
-                  self.control.speed = self.goalpoint.confidence * self.speed_slope *0.2 #slow down factor
+                  self.control.speed = self.goalpoint.confidence * self.speed_slope
             elif pttype == 's' :
                   self.control.speed = self.speed_avg
-            self.control.steer = delta / np.pi * 180 #in degree
+            self.control.steer = 1*delta / np.pi * 180 #in degree
             self.control.brake = 1
             self.cont_buff[0:-1]=self.cont_buff[1:self.buff_size]
             self.cont_buff[self.buff_size-1] = [self.control, self.cartime]
